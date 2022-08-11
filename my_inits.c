@@ -104,7 +104,7 @@ reset - write 1 to 00
 void init_pm_addr ()
 {
     // initialize PM max addresses
-	Xil_Out32(R_PM0_CONTROL , 0xC3FFC3FF);
+	Xil_Out32(R_PM0_CONTROL , 0xC400C400);
 	Xil_Out32(R_PM1_CONTROL , 0xC3FFC3FF);
 	Xil_Out32(R_PM2_CONTROL , 0xC1FFC1FF);
 	xil_printf("-----PM Max addresses initialized-----\r\n");
@@ -127,12 +127,6 @@ void init_pm_dac ()
 	init_dac_b(R_PM2_SPICONTROL, 3); // U45
 
 	xil_printf("-----PM DAC setup & timing initialized-----\r\n");
-}
-
-void init_galvo()
-{
-	// write 12 to H_MAX and 5 to V_MAX
-	Xil_Out32(R_GALVO_CONTROL, 0x00FF03FF);
 }
 
 void laser_edfa_off(){
@@ -1009,18 +1003,6 @@ void moving_average_clr()
 	Xil_Out32(0x43C60000, 0);
 }
 
-
-void manual_galvo(unsigned int horiz, unsigned int vert)
-{
-	unsigned int v;
-	xil_printf("Setting galvo manual mode \r\n");
-
-	v = (horiz & 0x7FF) | ((vert & 0x7FF) << 16);
-	//Xil_Out32(0x43C60000 + 4*5, 0x00000000 | v);
-	Xil_Out32(R_GALVO_MANUAL, 0x80000000 | v);
-	//Xil_Out32(0x43C60000 + 4*5, 0x00000000 | v);
-}
-
 void get_peaks()
 {
 	unsigned int i, apeak, aindex;
@@ -1050,67 +1032,76 @@ void get_peaks()
 	xil_printf("add1 = %d  add2 = %d\r\n",add1,add2);
 
 	printf("Ratio = %5.2e \r\n",(float)add1/(float)add2);
-/*
-    // now sort by index
-    for (k = 0; k < NPEAKS; ++k){
-       for (j = k + 1; j < NPEAKS; ++j){
-          if (indices[k] < indices[j]){
-             a = indices[k];
-             aa = peaks[k];
-             indices[k] = indices[j];
-             peaks[k] = peaks[j];
-             indices[j] = a;
-             peaks[j] = aa;
-          }
-       }
-    }
-	xil_printf("  ==>   Now in order\r\n");
-
-    for (i = 0; i < NPEAKS; i++)
-    	xil_printf("      %4d %6d  %5X\r\n",indices[i], peaks[i], peaks[i]);
-
-
-    add1 = peaks[0] + peaks[1] + peaks[2]+ peaks[3]+ peaks[4];
-    add2 = peaks[5] + peaks[6] + peaks[7]+ peaks[8]+ peaks[8];
-	xil_printf("add1 = %d  add2 = %d\r\n",add1,add2);
-
-	printf("Ratio = %5.2e \r\n",(float)add1/(float)add2);
-*/
-
-//	xil_printf("Ch 1: Index     Peak\r\n");
-//    for (i = 8; i < 16; i++)
-//    	xil_printf("      %4d %6d  %5X\r\n",indices[i], peaks[i], peaks[i]);
 }
 
 void load_awg_vector(unsigned int a){
-	unsigned int i, address;
+	unsigned int i, address, offset;
+	float gain;
+
+	gain = 0.01;
+    offset = 512 - gain*511;
 
 	address = a;
-    for (i = 0; i < 1024; i++)
+    for (i = 0; i < 512; i++)
     {
-    	Xil_Out32(address, 512);
+    	Xil_Out32(address, (gain * (i*2))+ offset);
 //    	Xil_Out32(address, awg_vector[i]);
-
     	address += 4;
     }
+    for (i = 512; i < 1024; i++)
+    {
+    	Xil_Out32(address, (gain * (2046-2*i))+offset );
+//    	Xil_Out32(address, awg_vector[i]);
+    	address += 4;
+    }
+
     xil_printf("Wrote vector to %X\r\n",a);
+}
+
+void init_galvo()
+{
+	// write 12 to H_MAX and 5 to V_MAX
+	Xil_Out32(R_GALVO_CONTROL, 0x0003000F);
+}
+
+void manual_galvo(unsigned int horiz, unsigned int vert)
+{
+	unsigned int v;
+	xil_printf("Setting galvo manual mode \r\n");
+
+	v = (horiz & 0xFFF) | ((vert & 0xFFF) << 16);
+	//Xil_Out32(0x43C60000 + 4*5, 0x00000000 | v);
+	Xil_Out32(R_GALVO_CONTROL, 0x80000000 | v);
+	//Xil_Out32(0x43C60000 + 4*5, 0x00000000 | v);
 }
 
 void load_galvo_vectors(){
 	unsigned int i, address;
 
 	address = M_GALVO_H;
-    for (i = 0; i < 2048; i++)
+    for (i = 0; i < 1000; i++)
     {
-    	Xil_Out32(address, i*2);
+    	Xil_Out32(address, 0xFFF);
     	address += 4;
     }
+
+    for (i = 0; i < 1001; i++)
+    {
+    	Xil_Out32(address, 0x00);
+    	address += 4;
+    }
+
 	address = M_GALVO_V;
-    for (i = 0; i < 2048; i++)
+    for (i = 0; i < 10; i++)
     {
-    	Xil_Out32(address, i*2);
+    	Xil_Out32(address,0x1FF);
     	address += 4;
     }
+    for (i = 0; i < 100; i++)
+     {
+     	Xil_Out32(address,0x345);
+     	address += 4;
+     }
 }
 
 void enable_fft(){
@@ -1125,12 +1116,21 @@ void disable_fft(){
 
 void wait_peak_ready(){
 	// this blocks until peaks are ready
+
 	volatile unsigned int rdy;
-	rdy = Xil_In32(R_CONTROL) & b_STS_PEAK_RDY_HLD;
-	while((0== rdy))
-		rdy = Xil_In32(R_CONTROL) & b_STS_PEAK_RDY_HLD;
+	rdy = Xil_In32(R_CONTROL) & (1 << b_STS_PEAK_RDY_HLD);
+	while((0 == rdy))
+		rdy = Xil_In32(R_CONTROL) & (1 << b_STS_PEAK_RDY_HLD);
+
+	// == 1
 	// now reset the hold bit
 	Xil_Out32(R_CONTROL, 1 << b_RST_PEAKS_RDY);
+	Xil_Out32(R_CONTROL, 0);
+
+	rdy = Xil_In32(R_CONTROL) & (1 << b_STS_PEAK_RDY_HLD);
+	while((0 != rdy))
+		rdy = Xil_In32(R_CONTROL) & (1 << b_STS_PEAK_RDY_HLD);
+
 }
 
 void wait_start_frame()

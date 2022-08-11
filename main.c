@@ -192,6 +192,7 @@ int main()
 	unsigned int events, i;
 	unsigned int startframe, pixel;
 	unsigned int r, peak, idx, side, side_amp, channel;
+	volatile unsigned int rdy, rdy2;
 
 #if LWIP_IPV6==0
 	ip_addr_t ipaddr, netmask, gw;
@@ -281,15 +282,14 @@ int main()
 	    sleep(1);
     }
 	   // initialize PM max addresses and vectors
-//    	load_awg_vector(M_AWG0);
-//    	load_awg_vector(M_AWG1);
-//    	load_awg_vector(M_AWG2);
-//    	load_awg_vector(M_AWG3);
-//    	load_awg_vector(M_AWG4);
-//    	load_awg_vector(M_AWG5);
+    	load_awg_vector(M_AWG0);
+    	load_awg_vector(M_AWG1);
+    	load_awg_vector(M_AWG2);
+    	load_awg_vector(M_AWG3);
+    	load_awg_vector(M_AWG4);
+    	load_awg_vector(M_AWG5);
 
-    // =============  GALVO   ================
-//    	load_galvo_vectors();
+    // =============  AWG   ================
 //	    sleep(1);
 	    init_pm_addr();
 //	    sleep(1);
@@ -299,10 +299,12 @@ int main()
 
 //	    sleep(1);
 	    // need to uncomment to get start of frame
+	    load_galvo_vectors();
 	    xil_printf("About to init galvo\r\n");
 	    init_galvo();
 	    xil_printf("galvo done\r\n");
 	    sleep(1);
+//	    manual_galvo(0x600, 0x800);
 
 //	    xil_printf("All enabled\r\n");
 //	    disable(0);
@@ -357,10 +359,11 @@ int main()
 			// now at start of frame, get PACKET_SIZE points for each channel
 			for (pixel = 0; pixel < PACKET_SIZE*2; pixel++)
 			{
-				if (0 == (pixel % 100000))
-					xil_printf("\r\n%d", pixel);
+//				if (0 == (pixel % 100000))
+//					xil_printf("\r\n%d", pixel);
 
 				wait_peak_ready();
+
 				for (channel = 0; channel < 1; channel++)
 					{
 						results[pixel*6 + channel*2] = Xil_In32(M_PEAKS_IDXS + (channel *2));

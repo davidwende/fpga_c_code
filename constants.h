@@ -19,7 +19,7 @@
 
 // 4, 5
 #define R_GALVO_CONTROL (REGS_BASE + 0x10)
-#define R_GALVO_MANUAL  (REGS_BASE + 0x14)
+#define R_GALVO_MANUAL  (REGS_BASE + 0x12)
 
 // 6, 7
 #define R_ADC_SPICONTROL  (REGS_BASE + 0x18)
